@@ -10,6 +10,7 @@ Run
 
 ```bash
 docker run -it --net=host -e MODE=producer -e TOPIC=test -e SSL=true -e BOOTSTRAP=broker1:port1,broker2:port2 alonsod86/kafka
+```
 
 ```bash
 docker run -it --net=host -e MODE=consumer -e TOPIC=test -e SSL=true -e BOOTSTRAP=broker1:port1,broker2:port2 alonsod86/kafka
