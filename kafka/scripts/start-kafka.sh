@@ -32,44 +32,42 @@ if [ ! -z "$ADVERTISED_PORT" ]; then
     fi
 fi
 
-# Set the zookeeper chroot
-if [ ! -z "$ZK_CHROOT" ]; then
-    # wait for zookeeper to start up
-    until /usr/share/zookeeper/bin/zkServer.sh status; do
-      sleep 0.1
-    done
-
-    # create the chroot node
-    echo "create /$ZK_CHROOT \"\"" | /usr/share/zookeeper/bin/zkCli.sh || {
-        echo "can't create chroot in zookeeper, exit"
-        exit 1
-    }
-
+# Set the zookeeper connection string
+if [ ! -z "$ZK_CONNECT" ]; then
     # configure kafka
-    sed -r -i "s/(zookeeper.connect)=(.*)/\1=localhost:2181\/$ZK_CHROOT/g" $KAFKA_HOME/config/server.properties
+    sed -r -i "s/(zookeeper.connect)=(.*)/\1=$ZK_CONNECT/g" $KAFKA_HOME/config/server.properties
 fi
 
-# Allow specification of log retention policies
-if [ ! -z "$LOG_RETENTION_HOURS" ]; then
-    echo "log retention hours: $LOG_RETENTION_HOURS"
-    sed -r -i "s/(log.retention.hours)=(.*)/\1=$LOG_RETENTION_HOURS/g" $KAFKA_HOME/config/server.properties
-fi
-if [ ! -z "$LOG_RETENTION_BYTES" ]; then
-    echo "log retention bytes: $LOG_RETENTION_BYTES"
-    sed -r -i "s/#(log.retention.bytes)=(.*)/\1=$LOG_RETENTION_BYTES/g" $KAFKA_HOME/config/server.properties
-fi
-
-# Configure the default number of log partitions per topic
-if [ ! -z "$NUM_PARTITIONS" ]; then
-    echo "default number of partition: $NUM_PARTITIONS"
-    sed -r -i "s/(num.partitions)=(.*)/\1=$NUM_PARTITIONS/g" $KAFKA_HOME/config/server.properties
-fi
-
-# Enable/disable auto creation of topics
-if [ ! -z "$AUTO_CREATE_TOPICS" ]; then
-    echo "auto.create.topics.enable: $AUTO_CREATE_TOPICS"
-    echo "auto.create.topics.enable=$AUTO_CREATE_TOPICS" >> $KAFKA_HOME/config/server.properties
+# Set the SSL configuration if any
+if [ "$SSL" = true ]; then
+	if  grep -q "^security.protocol" $KAFKA_HOME/config/$MODE.properties; then
+		echo "Configuration already exists"
+	else
+		echo "Configuring SSL on clients"
+	   	echo security.protocol=SSL >> $KAFKA_HOME/config/$MODE.properties
+		echo ssl.truststore.location=/tmp/truststore.jks >> $KAFKA_HOME/config/$MODE.properties
+		echo ssl.truststore.password=c4_trust_d3f4ult_k3yst0r3 >> $KAFKA_HOME/config/$MODE.properties
+		echo ssl.keystore.location=/tmp/keystore.jks >> $KAFKA_HOME/config/$MODE.properties
+		echo ssl.keystore.password=br0k3r_2_c0nflu3nt_k4fk4_s3c >> $KAFKA_HOME/config/$MODE.properties
+		echo ssl.key.password=br0k3r_2_c0nflu3nt_k4fk4_s3c >> $KAFKA_HOME/config/$MODE.properties
+		echo ssl.enabled.protocols=TLSv1.2 >> $KAFKA_HOME/config/$MODE.properties
+		echo ssl.truststore.type=JKS >> $KAFKA_HOME/config/$MODE.properties
+		echo ssl.keystore.type=JKS >> $KAFKA_HOME/config/$MODE.properties
+	fi
+else 
+	echo "No SSL configuration required"
+	if grep -q "^security.protocol" $KAFKA_HOME/config/$MODE.properties; then
+		echo "Removing SSL configuration from clients"
+		sed -i '/ssl./ d' $KAFKA_HOME/config/$MODE.properties
+		sed -i '/security./ d' $KAFKA_HOME/config/$MODE.properties
+	fi
 fi
 
 # Run Kafka
-$KAFKA_HOME/bin/kafka-server-start.sh $KAFKA_HOME/config/server.properties
+#$KAFKA_HOME/bin/kafka-server-start.sh $KAFKA_HOME/config/server.properties
+echo "Launching $MODE"
+if [ "$MODE" = "consumer" ]; then
+	$KAFKA_HOME/bin/kafka-console-consumer.sh --new-consumer --bootstrap-server $BOOTSTRAP -topic $TOPIC --consumer.config $KAFKA_HOME/config/consumer.properties
+else 
+	$KAFKA_HOME/bin/kafka-console-producer.sh --broker-list $BOOTSTRAP --topic $TOPIC --producer.config $KAFKA_HOME/config/producer.properties
+fi
